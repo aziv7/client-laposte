@@ -11,24 +11,39 @@ import { cn } from '@/lib/utils';
 function ToastContent({
   title,
   description,
-  meta,
-  action,
+  details,
 }: {
   title: string;
   description?: string;
-  meta?: React.ReactNode;
-  action?: React.ReactNode;
+  details?: React.ReactNode;
 }) {
+  const { t } = useI18n();
+  const [open, setOpen] = React.useState(false);
+
   return (
     <div className="flex w-full items-start gap-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold leading-5">{title}</p>
-          {meta}
-        </div>
+        <p className="text-sm font-semibold leading-5">{title}</p>
         {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+
+        {details ? (
+          <div className="mt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-lg px-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? t('common.hide') : t('common.details')}
+            </Button>
+            {open ? <div className="mt-2">{details}</div> : null}
+          </div>
+        ) : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -89,14 +104,22 @@ export function useAppToast() {
 
   const showSuccess = React.useCallback(
     (title: string, description?: string, opts?: ToastOptions) => {
-      toast(<ToastContent title={title} description={description} />, { type: 'success', ...opts });
+      toast(<ToastContent title={title} description={description} />, {
+        type: 'success',
+        autoClose: 2500,
+        ...opts,
+      });
     },
     [],
   );
 
   const showError = React.useCallback(
     (title: string, description?: string, opts?: ToastOptions) => {
-      toast(<ToastContent title={title} description={description} />, { type: 'error', ...opts });
+      toast(<ToastContent title={title} description={description} />, {
+        type: 'error',
+        autoClose: 4000,
+        ...opts,
+      });
     },
     [],
   );
@@ -111,41 +134,49 @@ export function useAppToast() {
             <ToastContent
               title={t('toast.rateLimitedTitle')}
               description={t('toast.rateLimitedDesc', { seconds })}
-              meta={<CodePill>HTTP 429</CodePill>}
+              details={
+                <div className="flex flex-wrap items-center gap-2">
+                  <CodePill>HTTP 429</CodePill>
+                  {error.requestId ? <CodePill>{t('toast.requestId')}: {error.requestId}</CodePill> : null}
+                  {error.requestId ? (
+                    <RequestIdAction
+                      requestId={error.requestId}
+                      labelCopy={t('common.copy')}
+                      labelCopied={t('common.copied')}
+                    />
+                  ) : null}
+                </div>
+              }
             />,
-            { type: 'warning' },
+            { type: 'warning', autoClose: 4500, toastId: 'api:HTTP_429' },
           );
           return;
         }
 
-        const title = opts?.title ?? t('toast.error');
+        const title =
+          opts?.title ??
+          (error.code === 'NOT_FOUND' ? t('public.result.notFoundTitle') : t('toast.error'));
         const description = getFriendlyMessageFromCode(t, error.code, error.message);
 
         toast(
           <ToastContent
             title={title}
             description={description}
-            meta={
-              <span className="inline-flex flex-wrap items-center gap-2">
+            details={
+              <div className="flex flex-wrap items-center gap-2">
                 <CodePill>{error.code}</CodePill>
+                {error.requestId ? <CodePill>{t('toast.requestId')}: {error.requestId}</CodePill> : null}
                 {error.requestId ? (
-                  <CodePill>
-                    {t('toast.requestId')}: {error.requestId}
-                  </CodePill>
+                  <RequestIdAction
+                    requestId={error.requestId}
+                    labelCopy={t('common.copy')}
+                    labelCopied={t('common.copied')}
+                  />
                 ) : null}
-              </span>
-            }
-            action={
-              error.requestId ? (
-                <RequestIdAction
-                  requestId={error.requestId}
-                  labelCopy={t('common.copy')}
-                  labelCopied={t('common.copied')}
-                />
-              ) : null
+              </div>
             }
           />,
-          { type: 'error' },
+          { type: 'error', autoClose: 4000, toastId: `api:${error.code}` },
         );
         return;
       }
@@ -154,6 +185,8 @@ export function useAppToast() {
         <ToastContent title={opts?.title ?? t('toast.error')} description={t('apiError.INTERNAL_ERROR')} />,
         {
           type: 'error',
+          autoClose: 4000,
+          toastId: 'api:INTERNAL_ERROR',
         },
       );
     },

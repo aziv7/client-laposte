@@ -1,48 +1,74 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, PencilLine } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import * as React from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowPathIcon, PencilSquareIcon } from "@heroicons/react/24/solid";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 
-import { useAppToast } from '@/components/toast/toast';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { useI18n } from '@/i18n/I18nProvider';
+import { useAppToast } from "@/components/toast/toast";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useI18n, type TFunction } from "@/i18n/I18nProvider";
 import {
   ApiClientError,
   adminUpdateCardRequest,
   type AdminCardRequestItem,
   type AdminCardRequestUpdateBody,
   type CardRequestStatus,
-} from '@/lib/api/client';
-import { useAuth } from '@/lib/auth/auth-context';
+} from "@/lib/api/client";
+import { useAuth } from "@/lib/auth/auth-context";
 
-const optionalTrimmed = z.preprocess((v) => {
-  if (v === undefined || v === null) return undefined;
-  if (typeof v !== 'string') return String(v);
-  const trimmed = v.trim();
-  return trimmed.length === 0 ? undefined : trimmed;
-}, z.string().max(255).optional());
+const statusValues = [
+  "UNCHANGED",
+  "CREATED",
+  "IN_PROGRESS",
+  "READY",
+  "DELIVERED",
+  "CANCELLED",
+] as const;
 
-const statusValues = ['UNCHANGED', 'CREATED', 'IN_PROGRESS', 'READY', 'DELIVERED', 'CANCELLED'] as const;
+function makeUpdateSchema(t: TFunction) {
+  return z
+    .object({
+      status: z.enum(statusValues),
+      pickupEstablishment: z.string().trim().max(255).optional(),
+      pickupAddress: z.string().trim().max(255).optional(),
+    })
+    .refine(
+      (v) =>
+        v.status !== "UNCHANGED" || v.pickupEstablishment || v.pickupAddress,
+      {
+        message: t("admin.updateStatus.validation.atLeastOneField"),
+        path: ["status"],
+      }
+    );
+}
 
-const updateSchema = z
-  .object({
-    status: z.enum(statusValues),
-    pickupEstablishment: optionalTrimmed,
-    pickupAddress: optionalTrimmed,
-  })
-  .refine((v) => v.status !== 'UNCHANGED' || v.pickupEstablishment || v.pickupAddress, {
-    message: 'Veuillez modifier au moins un champ.',
-    path: ['status'],
-  });
-
-type UpdateValues = z.infer<typeof updateSchema>;
+type UpdateValues = z.infer<ReturnType<typeof makeUpdateSchema>>;
 
 export function UpdateStatusDialog({
   open,
@@ -59,20 +85,21 @@ export function UpdateStatusDialog({
   const toast = useAppToast();
   const auth = useAuth();
 
+  const updateSchema = React.useMemo(() => makeUpdateSchema(t), [t]);
   const form = useForm<UpdateValues>({
     resolver: zodResolver(updateSchema),
     defaultValues: {
-      status: 'UNCHANGED',
+      status: "UNCHANGED",
       pickupEstablishment: undefined,
       pickupAddress: undefined,
     },
-    mode: 'onBlur',
+    mode: "onBlur",
   });
 
   React.useEffect(() => {
     if (!open) {
       form.reset({
-        status: 'UNCHANGED',
+        status: "UNCHANGED",
         pickupEstablishment: undefined,
         pickupAddress: undefined,
       });
@@ -85,8 +112,10 @@ export function UpdateStatusDialog({
     if (!item || !auth.accessToken) return;
 
     const body: AdminCardRequestUpdateBody = {};
-    if (values.status !== 'UNCHANGED') body.status = values.status as CardRequestStatus;
-    if (values.pickupEstablishment) body.pickupEstablishment = values.pickupEstablishment;
+    if (values.status !== "UNCHANGED")
+      body.status = values.status as CardRequestStatus;
+    if (values.pickupEstablishment)
+      body.pickupEstablishment = values.pickupEstablishment;
     if (values.pickupAddress) body.pickupAddress = values.pickupAddress;
 
     setSubmitting(true);
@@ -95,12 +124,12 @@ export function UpdateStatusDialog({
         accessToken: auth.accessToken,
         onAccessTokenRefreshed: auth.setAccessToken,
       });
-      toast.success(t('toast.success'), 'Mise à jour effectuée.');
+      toast.success(t("toast.success"), t("admin.updateStatus.successToast"));
       onOpenChange(false);
       onUpdated();
     } catch (e) {
       if (e instanceof ApiClientError && e.status === 401) {
-        toast.error(t('toast.error'), t('toast.sessionExpired'));
+        toast.error(t("toast.error"), t("toast.sessionExpired"));
         await auth.logout();
         return;
       }
@@ -115,16 +144,17 @@ export function UpdateStatusDialog({
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PencilLine className="size-4" />
-            Mettre à jour le statut
+            <PencilSquareIcon className="size-4" />
+            {t("admin.updateStatus.title")}
           </DialogTitle>
           <DialogDescription>
             {item ? (
               <span>
-                {item.nom} {item.prenom} — CIN <span className="font-mono">{item.cin}</span>
+                {item.nom} {item.prenom} — CIN{" "}
+                <span className="font-mono">{item.cin}</span>
               </span>
             ) : (
-              'Sélectionnez une ligne.'
+              t("admin.updateStatus.selectRow")
             )}
           </DialogDescription>
         </DialogHeader>
@@ -132,12 +162,21 @@ export function UpdateStatusDialog({
         {item ? (
           <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-muted-foreground">Statut actuel</span>
-              <span className="font-medium">{t(`status.${item.status as CardRequestStatus}`)}</span>
+              <span className="text-muted-foreground">
+                {t("admin.updateStatus.currentStatus")}
+              </span>
+              <span className="font-medium">
+                {t(`status.${item.status as CardRequestStatus}`)}
+              </span>
             </div>
             <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
-              <div>Établissement: {item.pickupEstablishment ?? '—'}</div>
-              <div>Adresse: {item.pickupAddress ?? '—'}</div>
+              <div>
+                {t("admin.updateStatus.establishment")}:{" "}
+                {item.pickupEstablishment ?? "—"}
+              </div>
+              <div>
+                {t("admin.updateStatus.address")}: {item.pickupAddress ?? "—"}
+              </div>
             </div>
           </div>
         ) : null}
@@ -149,19 +188,31 @@ export function UpdateStatusDialog({
               name="status"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nouveau statut</FormLabel>
+                  <FormLabel>{t("admin.updateStatus.newStatus")}</FormLabel>
                   <FormControl>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <SelectTrigger className="w-full rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="UNCHANGED">Ne pas modifier</SelectItem>
-                        <SelectItem value="CREATED">{t('status.CREATED')}</SelectItem>
-                        <SelectItem value="IN_PROGRESS">{t('status.IN_PROGRESS')}</SelectItem>
-                        <SelectItem value="READY">{t('status.READY')}</SelectItem>
-                        <SelectItem value="DELIVERED">{t('status.DELIVERED')}</SelectItem>
-                        <SelectItem value="CANCELLED">{t('status.CANCELLED')}</SelectItem>
+                        <SelectItem value="UNCHANGED">
+                          {t("admin.updateStatus.unchanged")}
+                        </SelectItem>
+                        <SelectItem value="CREATED">
+                          {t("status.CREATED")}
+                        </SelectItem>
+                        <SelectItem value="IN_PROGRESS">
+                          {t("status.IN_PROGRESS")}
+                        </SelectItem>
+                        <SelectItem value="READY">
+                          {t("status.READY")}
+                        </SelectItem>
+                        <SelectItem value="DELIVERED">
+                          {t("status.DELIVERED")}
+                        </SelectItem>
+                        <SelectItem value="CANCELLED">
+                          {t("status.CANCELLED")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </FormControl>
@@ -176,13 +227,17 @@ export function UpdateStatusDialog({
                 name="pickupEstablishment"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nouvel établissement</FormLabel>
+                    <FormLabel>
+                      {t("admin.updateStatus.newEstablishment")}
+                    </FormLabel>
                     <FormControl>
                       <Textarea
                         className="min-h-[72px] rounded-xl"
-                        placeholder="Ex: Bureau de poste Tunis Centre"
+                        placeholder={t(
+                          "admin.updateStatus.placeholderEstablishment"
+                        )}
                         {...field}
-                        value={field.value ?? ''}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -195,13 +250,13 @@ export function UpdateStatusDialog({
                 name="pickupAddress"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nouvelle adresse</FormLabel>
+                    <FormLabel>{t("admin.updateStatus.newAddress")}</FormLabel>
                     <FormControl>
                       <Textarea
                         className="min-h-[72px] rounded-xl"
-                        placeholder="Ex: 12 Avenue Habib Bourguiba, Tunis"
+                        placeholder={t("admin.updateStatus.placeholderAddress")}
                         {...field}
-                        value={field.value ?? ''}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -211,12 +266,23 @@ export function UpdateStatusDialog({
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="ghost" className="rounded-xl" onClick={() => onOpenChange(false)}>
-                {t('common.cancel')}
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-xl"
+                onClick={() => onOpenChange(false)}
+              >
+                {t("common.cancel")}
               </Button>
-              <Button type="submit" className="rounded-xl" disabled={submitting || !item}>
-                {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-                {t('common.save')}
+              <Button
+                type="submit"
+                className="rounded-xl"
+                disabled={submitting || !item}
+              >
+                {submitting ? (
+                  <ArrowPathIcon className="size-4 animate-spin" />
+                ) : null}
+                {t("common.save")}
               </Button>
             </DialogFooter>
           </form>
@@ -225,5 +291,3 @@ export function UpdateStatusDialog({
     </Dialog>
   );
 }
-
-

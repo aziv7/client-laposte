@@ -1,48 +1,79 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, RotateCcw, Search } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import * as React from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 
-import { StatusTimeline } from '@/app/_components/StatusTimeline';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useAppToast } from '@/components/toast/toast';
-import { useI18n } from '@/i18n/I18nProvider';
-import { ApiClientError, publicGetCardStatus, type CardStatusResponse } from '@/lib/api/client';
-import { cn } from '@/lib/utils';
+import { StatusTimeline } from "@/app/_components/StatusTimeline";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAppToast } from "@/components/toast/toast";
+import { useI18n, type TFunction } from "@/i18n/I18nProvider";
+import { getIntlLocale } from "@/i18n/i18n";
+import {
+  ApiClientError,
+  publicGetCardStatus,
+  type CardStatusResponse,
+} from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 
-const cardStatusSchema = z.object({
-  nom: z.string().trim().min(1, 'Veuillez saisir votre nom.').max(100, 'Nom trop long.'),
-  prenom: z.string().trim().min(1, 'Veuillez saisir votre prénom.').max(100, 'Prénom trop long.'),
-  cin: z.string().trim().regex(/^[0-9]{8}$/, 'Le CIN doit contenir 8 chiffres.'),
-  codePostal: z.string().trim().regex(/^[0-9]{4}$/, 'Le code postal doit contenir 4 chiffres.'),
-  gouvernorat: z
-    .string()
-    .trim()
-    .min(1, 'Veuillez saisir votre gouvernorat.')
-    .max(100, 'Gouvernorat trop long.'),
-});
+function makeCardStatusSchema(t: TFunction) {
+  return z.object({
+    nom: z
+      .string()
+      .trim()
+      .min(1, t("public.form.validation.nomRequired"))
+      .max(100, t("public.form.validation.nomTooLong")),
+    prenom: z
+      .string()
+      .trim()
+      .min(1, t("public.form.validation.prenomRequired"))
+      .max(100, t("public.form.validation.prenomTooLong")),
+    cin: z
+      .string()
+      .trim()
+      .regex(/^[0-9]{8}$/, t("public.form.validation.cinInvalid")),
+    codePostal: z
+      .string()
+      .trim()
+      .regex(/^[0-9]{4}$/, t("public.form.validation.codePostalInvalid")),
+    gouvernorat: z
+      .string()
+      .trim()
+      .min(1, t("public.form.validation.gouvernoratRequired"))
+      .max(100, t("public.form.validation.gouvernoratTooLong")),
+  });
+}
 
-type CardStatusFormValues = z.infer<typeof cardStatusSchema>;
+type CardStatusFormValues = z.infer<ReturnType<typeof makeCardStatusSchema>>;
 
-function formatDateFr(iso: string): string {
+function formatDateTime(iso: string, intlLocale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  return new Intl.DateTimeFormat(intlLocale, {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(d);
 }
 
 export function CardStatusForm() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const toast = useAppToast();
+
+  const isRtl = locale === "ar";
+  const cardStatusSchema = React.useMemo(() => makeCardStatusSchema(t), [t]);
 
   const [result, setResult] = React.useState<CardStatusResponse | null>(null);
   const [notFound, setNotFound] = React.useState(false);
@@ -53,20 +84,23 @@ export function CardStatusForm() {
 
   React.useEffect(() => {
     if (cooldownSeconds <= 0) return;
-    const id = window.setTimeout(() => setCooldownSeconds((s) => Math.max(0, s - 1)), 1000);
+    const id = window.setTimeout(
+      () => setCooldownSeconds((s) => Math.max(0, s - 1)),
+      1000
+    );
     return () => window.clearTimeout(id);
   }, [cooldownSeconds]);
 
   const form = useForm<CardStatusFormValues>({
     resolver: zodResolver(cardStatusSchema),
     defaultValues: {
-      nom: '',
-      prenom: '',
-      cin: '',
-      codePostal: '',
-      gouvernorat: '',
+      nom: "",
+      prenom: "",
+      cin: "",
+      codePostal: "",
+      gouvernorat: "",
     },
-    mode: 'onBlur',
+    mode: "onBlur",
   });
 
   async function onSubmit(values: CardStatusFormValues) {
@@ -81,14 +115,25 @@ export function CardStatusForm() {
     setResult(null);
 
     try {
-      const res = await publicGetCardStatus(values, { signal: controller.signal });
+      const res = await publicGetCardStatus(values, {
+        signal: controller.signal,
+      });
       setResult(res);
-      toast.success(t('toast.success'), t('toast.statusFetched'));
+      toast.success(t("toast.success"), t("toast.statusFetched"));
     } catch (e) {
-      if ((e as Error)?.name === 'AbortError') return;
+      if ((e as Error)?.name === "AbortError") return;
 
       if (e instanceof ApiClientError) {
-        if (e.status === 404) setNotFound(true);
+        const isNotFound = e.status === 404 || e.code === "NOT_FOUND";
+        if (isNotFound) {
+          setNotFound(true);
+          toast.error(
+            t("public.result.notFoundTitle"),
+            t("public.result.notFoundDesc"),
+            { toastId: `public:notfound:${locale}` }
+          );
+          return;
+        }
         if (e.status === 429) setCooldownSeconds(e.retryAfterSeconds ?? 30);
       }
 
@@ -117,9 +162,13 @@ export function CardStatusForm() {
                 name="nom"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('public.form.nom')}</FormLabel>
+                    <FormLabel>{t("public.form.nom")}</FormLabel>
                     <FormControl>
-                      <Input autoComplete="family-name" placeholder="Ex: Jerbi" {...field} />
+                      <Input
+                        autoComplete="family-name"
+                        placeholder={t("public.form.placeholder.nom")}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -131,9 +180,13 @@ export function CardStatusForm() {
                 name="prenom"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('public.form.prenom')}</FormLabel>
+                    <FormLabel>{t("public.form.prenom")}</FormLabel>
                     <FormControl>
-                      <Input autoComplete="given-name" placeholder="Ex: Ali" {...field} />
+                      <Input
+                        autoComplete="given-name"
+                        placeholder={t("public.form.placeholder.prenom")}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -147,12 +200,12 @@ export function CardStatusForm() {
                 name="cin"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('public.form.cin')}</FormLabel>
+                    <FormLabel>{t("public.form.cin")}</FormLabel>
                     <FormControl>
                       <Input
                         inputMode="numeric"
                         maxLength={8}
-                        placeholder="8 chiffres"
+                        placeholder={t("public.form.placeholder.cin")}
                         autoComplete="off"
                         {...field}
                       />
@@ -167,12 +220,12 @@ export function CardStatusForm() {
                 name="codePostal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('public.form.codePostal')}</FormLabel>
+                    <FormLabel>{t("public.form.codePostal")}</FormLabel>
                     <FormControl>
                       <Input
                         inputMode="numeric"
                         maxLength={4}
-                        placeholder="4 chiffres"
+                        placeholder={t("public.form.placeholder.codePostal")}
                         autoComplete="postal-code"
                         {...field}
                       />
@@ -188,9 +241,13 @@ export function CardStatusForm() {
               name="gouvernorat"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('public.form.gouvernorat')}</FormLabel>
+                  <FormLabel>{t("public.form.gouvernorat")}</FormLabel>
                   <FormControl>
-                    <Input autoComplete="address-level1" placeholder="Ex: Tunis" {...field} />
+                    <Input
+                      autoComplete="address-level1"
+                      placeholder={t("public.form.placeholder.gouvernorat")}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -204,11 +261,11 @@ export function CardStatusForm() {
                 disabled={loading || cooldownSeconds > 0}
               >
                 {loading ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <ArrowPathIcon className="size-4 animate-spin" />
                 ) : (
-                  <Search className="size-4" />
+                  <MagnifyingGlassIcon className="size-4" />
                 )}
-                {t('public.form.submit')}
+                {t("public.form.submit")}
               </Button>
 
               <Button
@@ -218,18 +275,18 @@ export function CardStatusForm() {
                 onClick={onReset}
                 disabled={loading}
               >
-                <RotateCcw className="size-4" />
-                {t('public.form.reset')}
+                <ArrowPathIcon className="size-4" />
+                {t("public.form.reset")}
               </Button>
 
               {cooldownSeconds > 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {t('toast.rateLimitedDesc', { seconds: cooldownSeconds })}
+                  {t("toast.rateLimitedDesc", { seconds: cooldownSeconds })}
                 </p>
               ) : null}
             </div>
 
-            <p className="text-xs text-muted-foreground">{t('public.hint')}</p>
+            <p className="text-xs text-muted-foreground">{t("public.hint")}</p>
           </form>
         </Form>
       </div>
@@ -250,25 +307,47 @@ export function CardStatusForm() {
 
             <Card className="border-border/60 bg-card/80 backdrop-blur">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t('public.result.pickup')}</CardTitle>
+                <CardTitle className="text-base">
+                  {t("public.result.pickup")}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{t('public.result.updatedAt')}</span>
-                  <span className="font-medium">{formatDateFr(result.updatedAt)}</span>
+                  <span className="text-muted-foreground">
+                    {t("public.result.updatedAt")}
+                  </span>
+                  <span className="font-medium">
+                    {formatDateTime(result.updatedAt, getIntlLocale(locale))}
+                  </span>
                 </div>
 
                 <div className="grid gap-2 pt-2">
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-muted-foreground">{t('public.result.pickupEstablishment')}</span>
-                    <span className={cn('text-right font-medium', !result.pickupEstablishment && 'text-muted-foreground')}>
-                      {result.pickupEstablishment ?? '—'}
+                    <span className="text-muted-foreground">
+                      {t("public.result.pickupEstablishment")}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isRtl ? "text-left" : "text-right",
+                        !result.pickupEstablishment && "text-muted-foreground"
+                      )}
+                    >
+                      {result.pickupEstablishment ?? "—"}
                     </span>
                   </div>
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-muted-foreground">{t('public.result.pickupAddress')}</span>
-                    <span className={cn('text-right font-medium', !result.pickupAddress && 'text-muted-foreground')}>
-                      {result.pickupAddress ?? '—'}
+                    <span className="text-muted-foreground">
+                      {t("public.result.pickupAddress")}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isRtl ? "text-left" : "text-right",
+                        !result.pickupAddress && "text-muted-foreground"
+                      )}
+                    >
+                      {result.pickupAddress ?? "—"}
                     </span>
                   </div>
                 </div>
@@ -278,19 +357,27 @@ export function CardStatusForm() {
         ) : notFound ? (
           <Card className="border-border/60 bg-card/80 backdrop-blur">
             <CardHeader>
-              <CardTitle className="text-base">{t('public.result.notFoundTitle')}</CardTitle>
+              <CardTitle className="text-base">
+                {t("public.result.notFoundTitle")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{t('public.result.notFoundDesc')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("public.result.notFoundDesc")}
+              </p>
             </CardContent>
           </Card>
         ) : (
           <Card className="border-border/60 bg-card/80 backdrop-blur">
             <CardHeader>
-              <CardTitle className="text-base">{t('public.result.placeholderTitle')}</CardTitle>
+              <CardTitle className="text-base">
+                {t("public.result.placeholderTitle")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{t('public.result.placeholderDesc')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("public.result.placeholderDesc")}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -298,5 +385,3 @@ export function CardStatusForm() {
     </div>
   );
 }
-
-

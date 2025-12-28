@@ -138,19 +138,24 @@ function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
 function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
   const { error, formMessageId } = useFormField()
   const body = error ? String(error?.message ?? "") : props.children
-
-  if (!body) {
-    return null
-  }
+  const hasBody = !!body
 
   return (
     <p
       data-slot="form-message"
       id={formMessageId}
-      className={cn("text-destructive text-sm", className)}
+      data-empty={!hasBody}
+      aria-hidden={!hasBody}
+      className={cn(
+        // Reserve a consistent 2-line space for validation messages to keep
+        // grid rows aligned when some messages wrap and others don't.
+        "text-destructive text-sm leading-5 min-h-10 line-clamp-2",
+        !hasBody && "invisible",
+        className
+      )}
       {...props}
     >
-      {body}
+      {hasBody ? body : "\u00A0"}
     </p>
   )
 }
