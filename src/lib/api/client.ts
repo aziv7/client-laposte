@@ -277,7 +277,9 @@ async function adminRequest<T>(
     return await request<T>(path, { ...opts, accessToken: opts.accessToken });
   } catch (e) {
     const err = e instanceof ApiClientError ? e : null;
-    if (!err || err.status !== 401) throw e;
+    // Some backends return 403 for expired/invalid access tokens.
+    // We treat 401/403 the same: try one refresh + retry once.
+    if (!err || (err.status !== 401 && err.status !== 403)) throw e;
 
     // Attempt one refresh + retry once.
     const nextToken = await refreshAccessToken();

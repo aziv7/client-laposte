@@ -126,7 +126,16 @@ export function CardRequestsTable() {
 
   React.useEffect(() => {
     const id = window.setTimeout(() => {
-      setDebounced({ cin, nom, prenom, gouvernorat, status });
+      setDebounced((prev) => {
+        const next = { cin, nom, prenom, gouvernorat, status };
+        const same =
+          prev.cin === next.cin &&
+          prev.nom === next.nom &&
+          prev.prenom === next.prenom &&
+          prev.gouvernorat === next.gouvernorat &&
+          prev.status === next.status;
+        return same ? prev : next;
+      });
     }, 300);
     return () => window.clearTimeout(id);
   }, [cin, nom, prenom, gouvernorat, status]);
@@ -163,6 +172,7 @@ export function CardRequestsTable() {
       setItems(res.items);
       setTotal(res.total);
     } catch (e) {
+      if (controller.signal.aborted) return;
       if ((e as Error)?.name === "AbortError") return;
       if (e instanceof ApiClientError && e.status === 401) {
         toast.error(t("toast.error"), t("toast.sessionExpired"));
